@@ -13,14 +13,19 @@ PATH = r'/workspace/WebStack/Sentence_Simialrity/data/ArunPrasad.xlsx'
 
 source_sentence = []
 talent_list = []
-
+weights = []
 
 
 jtbd = pd.read_excel(PATH, sheet_name="jtbd")
 for i in jtbd['jtbd']:
+    weight = jtbd[jtbd['jtbd'] == i]['weight'].tolist()
     for j in i.split(u'•'):
         if len(j.split(' ')) > 5:
             source_sentence.append(j)
+            weights.append(weight)
+
+weight_mapper = {source_sentence[i]: weights[i][0] for i in range(len(source_sentence))}
+print(weight_mapper)
 
 talent = pd.read_excel(PATH, sheet_name="resume")
 text = str(talent[0][0])
@@ -99,7 +104,8 @@ for sentence in source_sentence:
     df['sentence'] = sentence
     #print(df.sort_values(by=['score'], ascending=False))
     df = df[df['score'] > 0.4]
-    
+    df['weight'] = weight_mapper[sentence]
+    df['main_score'] = df['score'].max()
     main = main._append(df)
     
-main.to_excel(f'.xlsx')
+main.to_excel('main.xlsx')
