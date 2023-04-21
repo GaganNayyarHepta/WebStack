@@ -1,3 +1,3 @@
-PATH = r'/workspace/WebStack/Sentence_Simialrity/data/ArunPrasad.xlsx'
+import os
 
-print(PATH[-1])
+people_list = os.listdir('/workspace/WebStack/Sentence_Simialrity/data')

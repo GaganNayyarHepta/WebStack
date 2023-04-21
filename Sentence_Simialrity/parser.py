@@ -5,30 +5,16 @@ nltk.download('punkt')
 import requests
 import time
 from pprint import pprint
+import os
 
 API_TOKEN = "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"
 API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
 headers = {"Authorization": f"Bearer {API_TOKEN}"}
-PATH = r'/workspace/WebStack/Sentence_Simialrity/data/ArunPrasad.xlsx'
 
-source_sentence = []
-talent_list = []
-weights = []
+def query(payload):
+	response = requests.post(API_URL, headers=headers, json=payload)
+	return response.json()
 
-
-jtbd = pd.read_excel(PATH, sheet_name="jtbd")
-for i in jtbd['jtbd']:
-    weight = jtbd[jtbd['jtbd'] == i]['weight'].tolist()
-    for j in i.split(u'•'):
-        if len(j.split(' ')) > 5:
-            source_sentence.append(j)
-            weights.append(weight)
-
-weight_mapper = {source_sentence[i]: weights[i][0] for i in range(len(source_sentence))}
-print(weight_mapper)
-
-talent = pd.read_excel(PATH, sheet_name="resume")
-text = str(talent[0][0])
 import re
 alphabets= "([A-Za-z])"
 prefixes = "(Mr|St|Mrs|Ms|Dr)[.]"
@@ -66,46 +52,72 @@ def split_into_sentences(text):
     sentences = [s.strip() for s in sentences]
     return sentences
 
-sentence_list = split_into_sentences(text=text)
 
-for i in sentence_list:
-    if len(i) > 40:
-        if '•' in i:
-            for j in i.split(u'•'):
-                talent_list.append(j)
-        if '-' in i:
-            for j in i.split('-'):
-                talent_list.append(j)
+for file in os.listdir('/workspace/WebStack/Sentence_Simialrity/data'):
+    PATH = os.path.join('/workspace/WebStack/Sentence_Simialrity/data', file)
+
+    source_sentence = []
+    talent_list = []
+    weights = []
+
+
+    jtbd = pd.read_excel(PATH, sheet_name="jtbd")
+    for i in jtbd['jtbd']:
+        weight = jtbd[jtbd['jtbd'] == i]['weight'].tolist()
+        for j in i.split(u'•'):
+            if len(j.split(' ')) > 5:
+                source_sentence.append(j)
+                weights.append(weight)
+            
+
+    weight_mapper = {source_sentence[i]: weights[i][0] for i in range(len(source_sentence))}
+
+    talent = pd.read_excel(PATH, sheet_name="resume")
+    text = str(talent[0][0])
+
+    sentence_list = split_into_sentences(text=text)
+
+    for i in sentence_list:
+        if len(i) > 40:
+            if '•' in i:
+                for j in i.split(u'•'):
+                    talent_list.append(j)
+            if '-' in i:
+                for j in i.split('-'):
+                    talent_list.append(j)
+            else:
+                talent_list.append(i)
         else:
             talent_list.append(i)
-    else:
-        talent_list.append(i)
 
-for i in talent_list:
-    if len(i) <= 10:
-        talent_list.remove(i)
-
-def query(payload):
-	response = requests.post(API_URL, headers=headers, json=payload)
-	return response.json()
+    for i in talent_list:
+        if len(i) <= 10:
+            talent_list.remove(i)
 
 
-main = pd.DataFrame()	
-for sentence in source_sentence:
-    output = query({
-        "inputs": {
-            "source_sentence": sentence,
-            "sentences": talent_list
-        },
-    })
-    print(sentence)
-    df = pd.DataFrame(list(zip(talent_list, output)), columns=['talent', 'score'])
-    #df = df[df['score'] == max(df['score'])]
-    df['sentence'] = sentence
-    #print(df.sort_values(by=['score'], ascending=False))
-    df = df[df['score'] > 0.4]
-    df['weight'] = weight_mapper[sentence]
-    df['main_score'] = df['score'].max()
-    main = main._append(df)
-    
-main.to_excel('main.xlsx')
+
+
+    main = pd.DataFrame()	
+    for sentence in source_sentence:
+        output = query({
+            "inputs": {
+                "source_sentence": sentence,
+                "sentences": talent_list
+            },
+        })
+        df = pd.DataFrame(list(zip(talent_list, output)), columns=['talent', 'score'])
+        #df = df[df['score'] == max(df['score'])]
+        df['sentence'] = sentence
+        #print(df.sort_values(by=['score'], ascending=False))
+        df = df[df['score'] > 0.4]
+        df['weight'] = weight_mapper[sentence]
+        df['main_score'] = (df['score'].max()) / 0.7
+        df['interim_score'] = df['main_score'] * df['weight']
+        
+        main = main._append(df)
+        
+    main_scores = main.groupby('weight', as_index=False)['interim_score'].mean()
+    main = main.merge(main_scores, on='weight', how='left')
+    main['talent_score'] = main_scores['interim_score'].sum()
+    #main_scores.to_excel('main_s.xlsx')
+    main.to_excel(f'{file.split(".")}_scores.xlsx')
